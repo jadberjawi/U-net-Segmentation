@@ -14,7 +14,7 @@ module load /softs/modules/cuda/12.8.1_570.124.06
 source ~/phd_v1_env/bin/activate
 
 # Navigate to the script directory
-cd ~/EVADIAB_clinical_ML/
+cd ~/Segmenatation-U-Net/
 
 # ---- W&B storage location ----
 export WANDB_DIR="$(pwd)/outputs"

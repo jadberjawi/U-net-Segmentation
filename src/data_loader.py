@@ -1,75 +1,77 @@
-from dataclasses import dataclass
-import pandas as pd
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import os
+import glob
+from sklearn.model_selection import KFold
+from monai.transforms import (
+    Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
+    RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped
+)
+from monai.data import CacheDataset, DataLoader
 
+def get_transforms(mode="train"):
+    """
+    Returns the transformation pipeline.
+    mode: 'train' (augmentation enabled) or 'val' (only normalization)
+    """
+    # Base transforms applied to ALL data
+    transforms = [
+        LoadImaged(keys=["image", "label"]),
+        EnsureChannelFirstd(keys=["image", "label"]),
+        ScaleIntensityd(keys=["image"]), # Normalize intensity to [0, 1]
+        EnsureTyped(keys=["image", "label"]),
+    ]
 
-@dataclass
-class TabularDataBundle:
-    X_train: np.ndarray
-    X_test: np.ndarray
-    y_train: np.ndarray
-    y_test: np.ndarray
-    feature_names: list
+    # Augmentation only for training
+    if mode == "train":
+        transforms += [
+            RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
+            RandGaussianNoised(keys=["image"], prob=0.1, mean=0.0, std=0.1),
+            Rand3DElasticd(
+                keys=["image", "label"], 
+                sigma_range=(5, 8), 
+                magnitude_range=(50, 150), 
+                prob=0.2, 
+                mode=("bilinear", "nearest") # Nearest for label to keep it 0/1
+            ),
+        ]
+    
+    return Compose(transforms)
 
+def get_dataloaders(config):
+    """
+    Splits data into K-Folds and returns train/val dataloaders for the specified fold.
+    """
+    data_dir = config['data']['data_dir']
+    
+    # Assuming file naming: patient_001.nii.gz and patient_001_seg.nii.gz
+    images = sorted(glob.glob(os.path.join(data_dir, "images", "*.nii.gz")))
+    labels = sorted(glob.glob(os.path.join(data_dir, "labels", "*.nii.gz")))
+    
+    data_dicts = [{"image": img, "label": lbl} for img, lbl in zip(images, labels)]
+    
+    # K-Fold Split
+    kf = KFold(n_splits=config['data']['n_folds'], shuffle=True, random_state=42)
+    splits = list(kf.split(data_dicts))
+    train_idx, val_idx = splits[config['data']['train_fold']]
+    
+    train_files = [data_dicts[i] for i in train_idx]
+    val_files = [data_dicts[i] for i in val_idx]
 
-class CardioDataset(Dataset):
-    def __init__(self, X: np.ndarray, y: np.ndarray):
-        self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32)
+    # Create Datasets
+    # CacheDataset accelerates training by caching preprocessed items in RAM
+    train_ds = CacheDataset(data=train_files, transform=get_transforms("train"), cache_rate=1.0)
+    val_ds = CacheDataset(data=val_files, transform=get_transforms("val"), cache_rate=1.0)
 
-    def __len__(self):
-        return self.X.shape[0]
-
-    def __getitem__(self, idx):
-        return self.X[idx], self.y[idx]
-
-
-def load_kaggle_cardio_bundle(
-    csv_path: str,
-    sep: str,
-    target_col: str,
-    id_col: str | None,
-    test_size: float,
-    seed: int,
-    stratify: bool,
-) -> TabularDataBundle:
-
-    df = pd.read_csv(csv_path, sep=sep)
-
-    if id_col and id_col in df.columns:
-        df = df.drop(columns=[id_col])
-
-    if target_col not in df.columns:
-        raise ValueError(f"Target col '{target_col}' not found. Columns: {list(df.columns)}")
-
-    y = df[target_col].astype(int).to_numpy()
-    X_df = df.drop(columns=[target_col])
-
-    # All columns are numeric/ordinal in this dataset
-    feature_names = list(X_df.columns)
-    X = X_df.to_numpy(dtype=np.float32)
-
-    strat = y if stratify else None
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=test_size,
-        random_state=seed,
-        stratify=strat,
+    train_loader = DataLoader(
+        train_ds, 
+        batch_size=config['data']['batch_size'], 
+        shuffle=True, 
+        num_workers=config['data']['num_workers']
+    )
+    val_loader = DataLoader(
+        val_ds, 
+        batch_size=1, # Validate one by one
+        shuffle=False, 
+        num_workers=config['data']['num_workers']
     )
 
-    # Standardize using train statistics only (no leakage)
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train).astype(np.float32)
-    X_test = scaler.transform(X_test).astype(np.float32)
-
-    return TabularDataBundle(
-        X_train=X_train,
-        X_test=X_test,
-        y_train=y_train.astype(np.float32),
-        y_test=y_test.astype(np.float32),
-        feature_names=feature_names,
-    )
+    return train_loader, val_loader
