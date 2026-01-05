@@ -5,7 +5,7 @@ from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
     RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped
 )
-from monai.data import CacheDataset, DataLoader
+from monai.data import CacheDataset, DataLoader, NibabelReader
 
 def get_transforms(mode="train"):
     """
@@ -14,7 +14,7 @@ def get_transforms(mode="train"):
     """
     # Base transforms applied to ALL data
     transforms = [
-        LoadImaged(keys=["image", "label"]),
+        LoadImaged(keys=["image", "label"], reader=NibabelReader),
         EnsureChannelFirstd(keys=["image", "label"]),
         ScaleIntensityd(keys=["image"]), # Normalize intensity to [0, 1]
         EnsureTyped(keys=["image", "label"]),

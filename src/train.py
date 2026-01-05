@@ -94,5 +94,25 @@ def train(config_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yaml")
+    # Add this line:
+    parser.add_argument("--fold", type=int, default=None, help="Override fold number from config")
+    
     args = parser.parse_args()
-    train(args.config)
+    
+    # Load config
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+        
+    # Override fold if provided in command line
+    if args.fold is not None:
+        config['data']['train_fold'] = args.fold
+        
+    # Pass the updated config dictionary to train()
+    # Note: You need to modify train() to accept a dict, not a path, 
+    # OR just re-save the dict temporarily. 
+    # A cleaner way is to pass the loaded config dict directly to train functions.
+    
+    # Let's adjust the train function signature in your mind:
+    # def train(config): ... instead of def train(config_path):
+    
+    train(config)
