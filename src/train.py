@@ -3,7 +3,7 @@ import torch
 import yaml
 import wandb
 import argparse
-from monai.losses import DiceLoss
+from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.utils import set_determinism
 from monai.transforms import AsDiscrete
@@ -13,11 +13,8 @@ from src.model import get_model
 from src.utils import get_device
 
 def train(config_path):
-    # 1. Load Config
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
 
-    # 2. Setup WandB
+    # 1. Setup WandB
     wandb.init(
         project=config['project_name'], 
         name=f"{config['experiment_name']}_fold{config['data']['train_fold']}",
@@ -28,15 +25,20 @@ def train(config_path):
     set_determinism(seed=42)
     device = get_device('auto')
 
-    # 3. Data & Model
+    # 2. Data & Model
     train_loader, val_loader = get_dataloaders(config)
     model = get_model(config).to(device)
     
-    loss_function = DiceLoss(to_onehot_y=True, softmax=True)
+    loss_function = DiceCELoss(
+        to_onehot_y=True, 
+        softmax=True, 
+        lambda_dice=1.0,  # Weight for Dice score
+        lambda_ce=1.0     # Weight for Cross Entropy (The "Force" fix)
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=float(config['training']['learning_rate']))
     dice_metric = DiceMetric(include_background=False, reduction="mean")
 
-    # 4. Training Loop
+    # 3. Training Loop
     best_metric = -1
     best_metric_epoch = -1
     
@@ -61,7 +63,7 @@ def train(config_path):
         wandb.log({"train/loss": epoch_loss, "epoch": epoch})
         print(f"Epoch {epoch}: Train Loss = {epoch_loss:.4f}")
 
-        # 5. Validation Loop
+        # 4. Validation Loop
         if (epoch + 1) % config['training']['val_interval'] == 0:
             model.eval()
             with torch.no_grad():
@@ -94,7 +96,6 @@ def train(config_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yaml")
-    # Add this line:
     parser.add_argument("--fold", type=int, default=None, help="Override fold number from config")
     
     args = parser.parse_args()
@@ -105,6 +106,7 @@ if __name__ == "__main__":
         
     # Override fold if provided in command line
     if args.fold is not None:
+        print(f"Overriding config fold with: {args.fold}")
         config['data']['train_fold'] = args.fold
         
     # Pass the updated config dictionary to train()

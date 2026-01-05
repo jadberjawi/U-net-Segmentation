@@ -3,7 +3,7 @@ import glob
 from sklearn.model_selection import KFold
 from monai.transforms import (
     Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
-    RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped
+    RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped, SpatialPadd
 )
 from monai.data import CacheDataset, DataLoader, NibabelReader
 
@@ -16,6 +16,8 @@ def get_transforms(mode="train"):
     transforms = [
         LoadImaged(keys=["image", "label"], reader=NibabelReader),
         EnsureChannelFirstd(keys=["image", "label"]),
+        # Spatial Pad to make dimensions divisible by 16 (80x80x80) Cube Rotating it in augmentation doesn't change the shape!
+        SpatialPadd(keys=["image", "label"], spatial_size=(80, 80, 80)), 
         ScaleIntensityd(keys=["image"]), # Normalize intensity to [0, 1]
         EnsureTyped(keys=["image", "label"]),
     ]
