@@ -9,9 +9,9 @@ def main():
     # Step 1: Raw -> Interim 1
     print("--- Step 1: Converting DICOM to NIfTI ---")
     step1_convert.run(
-        input_dicom_dir="data/raw", 
-        input_mask_dir="data/interim/01_converted",
-        output_dir="data/interim/01_converted"
+        input_dicom_dir=RAW_DICOM_DIR, 
+        input_mask_dir=RAW_MASK_DIR,
+        output_dir=INTERIM_DIR
     )
 
     # Step 2: Interim 1 -> Interim 2
