@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=3D_U-Net_Segmentation
-#SBATCH --output=logs/3DUNet_f4_log_%j.log
-#SBATCH --error=logs/3DUNet_f4_log_%j.log
+#SBATCH --job-name=Inference
+#SBATCH --output=logs/inference_log_%j.log
+#SBATCH --error=logs/inference_log_%j.log
 #SBATCH --gres=gpu:1
 #SBATCH --partition=GPU-A100
 #SBATCH --mem=32G  # Request memory (adjust as needed)
@@ -24,4 +24,4 @@ mkdir -p outputs
 echo "✅ Current Python environment: $(which python)"
 
 # Run dataset verification script
-python -m src.train --config configs/config.yaml --fold 4
+python -m src.inference

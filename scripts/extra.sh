@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=3D_U-Net_Segmentation
-#SBATCH --output=logs/3DUNet_f4_log_%j.log
-#SBATCH --error=logs/3DUNet_f4_log_%j.log
+#SBATCH --job-name=Convert_DICOM_to_NIfTI
+#SBATCH --output=logs/convert_dicom_to_nifti_log_%j.log
+#SBATCH --error=logs/convert_dicom_to_nifti_log_%j.log
 #SBATCH --gres=gpu:1
 #SBATCH --partition=GPU-A100
 #SBATCH --mem=32G  # Request memory (adjust as needed)
@@ -17,11 +17,11 @@ source ~/phd_v1_env/bin/activate
 cd ~/U-net-Segmentation/
 
 # ---- W&B storage location ----
-export WANDB_DIR="$(pwd)/outputs"
-mkdir -p outputs
+# export WANDB_DIR="$(pwd)/outputs"
+# mkdir -p outputs
 
 # Confirm correct Python environment
 echo "✅ Current Python environment: $(which python)"
 
 # Run dataset verification script
-python -m src.train --config configs/config.yaml --fold 4
+python -m extra.dcom_to_nifti

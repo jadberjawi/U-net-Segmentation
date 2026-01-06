@@ -24,4 +24,4 @@ cd ~/U-net-Segmentation/
 echo "✅ Current Python environment: $(which python)"
 
 # Run dataset verification script
-python -m src.check_prediction
+python -m src.checkers.check_prediction
