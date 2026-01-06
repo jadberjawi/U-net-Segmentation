@@ -4,7 +4,7 @@
 #SBATCH --error=logs/inference_log_%j.log
 #SBATCH --gres=gpu:1
 #SBATCH --partition=GPU-A100
-#SBATCH --mem=32G  # Request memory (adjust as needed)
+#SBATCH --mem=8G  # Request memory (adjust as needed)
 #SBATCH --cpus-per-task=4  # Request CPU cores
 
 # Load the correct CUDA module

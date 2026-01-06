@@ -7,6 +7,7 @@ from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.utils import set_determinism
 from monai.transforms import AsDiscrete
+from monai.networks.utils import one_hot
 
 from src.data_loader import get_dataloaders
 from src.model import get_model
@@ -29,11 +30,14 @@ def train(config_path):
     train_loader, val_loader = get_dataloaders(config)
     model = get_model(config).to(device)
     
+    #Define Class Weights (1.0 for Background, 10.0 for Organ)
+    class_weights = torch.tensor([1.0, 10.0]).to(device)    
     loss_function = DiceCELoss(
         to_onehot_y=True, 
         softmax=True, 
         lambda_dice=1.0,  # Weight for Dice score
-        lambda_ce=1.0     # Weight for Cross Entropy (The "Force" fix)
+        lambda_ce=1.0,     # Weight for Cross Entropy (The "Force" fix)
+        weight=class_weights
     )
     optimizer = torch.optim.Adam(model.parameters(), lr=float(config['training']['learning_rate']))
     dice_metric = DiceMetric(include_background=False, reduction="mean")
@@ -70,13 +74,12 @@ def train(config_path):
                 for val_data in val_loader:
                     val_inputs, val_labels = val_data["image"].to(device), val_data["label"].to(device)
                     val_outputs = model(val_inputs)
-                    
-                    # Post-processing for metric calculation
-                    # Convert raw output logits -> Discrete (0 or 1)
-                    val_outputs = AsDiscrete(argmax=True, to_onehot=2)(val_outputs)
-                    val_labels = AsDiscrete(to_onehot=2)(val_labels)
-                    
-                    dice_metric(y_pred=val_outputs, y=val_labels)
+
+                    pred_class = torch.argmax(val_outputs, dim=1, keepdim=True)
+                    y_pred = one_hot(pred_class, num_classes=2)
+                    y_true = one_hot(val_labels.long(), num_classes=2)
+
+                    dice_metric(y_pred=y_pred, y=y_true)
                 
                 metric = dice_metric.aggregate().item()
                 dice_metric.reset()

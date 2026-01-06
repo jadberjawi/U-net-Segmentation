@@ -1,9 +1,11 @@
 import os
 import glob
+import torch
 from sklearn.model_selection import KFold
 from monai.transforms import (
-    Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityd,
-    RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped, SpatialPadd
+    Compose, LoadImaged, EnsureChannelFirstd, ScaleIntensityRangePercentilesd,
+    RandRotate90d, RandGaussianNoised, Rand3DElasticd, EnsureTyped, SpatialPadd,
+    CastToTyped, RandCropByPosNegLabeld
 )
 from monai.data import CacheDataset, DataLoader, NibabelReader
 
@@ -18,13 +20,32 @@ def get_transforms(mode="train"):
         EnsureChannelFirstd(keys=["image", "label"]),
         # Spatial Pad to make dimensions divisible by 16 (80x80x80) Cube Rotating it in augmentation doesn't change the shape!
         SpatialPadd(keys=["image", "label"], spatial_size=(80, 80, 80)), 
-        ScaleIntensityd(keys=["image"]), # Normalize intensity to [0, 1]
         EnsureTyped(keys=["image", "label"]),
+        CastToTyped(keys=["label"], dtype=torch.long),
+        ScaleIntensityRangePercentilesd(
+            keys=["image"], 
+            lower=1, 
+            upper=99, 
+            b_min=0.0, 
+            b_max=1.0, 
+            clip=True,
+            relative=False
+        ),
     ]
 
     # Augmentation only for training
     if mode == "train":
         transforms += [
+            RandCropByPosNegLabeld(
+                keys=["image", "label"],
+                label_key="label",
+                spatial_size=(64, 64, 64),
+                pos=1,
+                neg=1,
+                num_samples=4,
+                image_key="image",
+                image_threshold=0,
+            ),
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=[0, 2]),
             RandGaussianNoised(keys=["image"], prob=0.1, mean=0.0, std=0.1),
             Rand3DElasticd(
@@ -57,6 +78,11 @@ def get_dataloaders(config):
     
     train_files = [data_dicts[i] for i in train_idx]
     val_files = [data_dicts[i] for i in val_idx]
+
+    print(
+        f"Fold {config['data']['train_fold']}: "
+        f"train={len(train_files)}, val={len(val_files)}"
+    )
 
     # Create Datasets
     # CacheDataset accelerates training by caching preprocessed items in RAM
